@@ -1,9 +1,9 @@
 {
     "python.pythonPath": "/Users/kulpreet/projects/libbitcoin/mining-time-lost/.venv/bin/python3",
     "editor.rulers": [
-        120
+        80
     ],
     "python.linting.flake8Args": [
-        "--max-line-length=120"
+        "--max-line-length=80"
     ]
 }
