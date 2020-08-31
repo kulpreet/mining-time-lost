@@ -1,29 +1,37 @@
+import asyncio
 import configparser
 import json
-import socket
 from datetime import datetime
 from urllib.parse import urlparse
 
 
-def run(poolname, url, user, password):
+async def pool_listener(poolname, url, user, password):
     parsed = urlparse(url)
     timestamp = datetime.now().isoformat(timespec='minutes')
-    with open(f'{poolname}-{timestamp}.json', 'wb') as file:  
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as client:
-            client.connect((parsed.hostname, parsed.port))
-            auth = {"params": [user, password], "id": 0, "method": "mining.authorize"}
-            client.send(f'{json.dumps(auth)}\n'.encode())
-            data = client.recv(1024)
+    file = open(f'{poolname}-{timestamp}.json', 'wt')
 
-            subscribe = {"id": 1, "method": "mining.subscribe", "params": []}
-            client.send(f'{json.dumps(subscribe)}\n'.encode())
+    reader, writer = await asyncio.open_connection(
+        parsed.hostname, parsed.port)
+    auth = {"params": [user, password],
+            "id": 0,
+            "method": "mining.authorize"}
+    writer.write(f'{json.dumps(auth)}\n'.encode())
 
-            while True:
-                data = client.recv(1024*1024)
-                # for msg in json.loads(data.decode()).split('\n'):
-                #     msg["r"] = datetime.now().isoformat()
-                file.write(data)
-                file.flush()
+    line = await reader.readline()
+
+    subscribe = {"id": 1, "method": "mining.subscribe", "params": []}
+    writer.write(f'{json.dumps(subscribe)}\n'.encode())
+
+    while True:
+        line = await reader.readline()
+        msg = json.loads(line.decode())
+        msg["r"] = datetime.now().isoformat()
+        file.write(json.dumps(msg)+'\n')
+        file.flush()
+        if not line:
+            break
+
+    file.close()
 
 
 if __name__ == "__main__":
@@ -31,4 +39,5 @@ if __name__ == "__main__":
     config.read("pools.ini")
 
     for pool in config.sections():
-        run(pool, config[pool]["url"], config[pool]["user"], config[pool]["password"])
+        asyncio.run(pool_listener(pool, config[pool]["url"],
+                    config[pool]["user"], config[pool]["password"]))
