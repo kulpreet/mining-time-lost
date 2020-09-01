@@ -42,13 +42,22 @@ async def pool_listener(poolname, url, user, password):
     file.close()
 
 
-if __name__ == "__main__":
-    config = configparser.ConfigParser()
-    config.read("pools.ini")
-
+async def run_with(config):
+    tasks = []
     for pool in config.sections():
         if not config[pool].getboolean("enabled"):
             continue
         print(f'Starting {pool}')
-        asyncio.run(pool_listener(pool, config[pool]["url"],
-                    config[pool]["user"], config[pool]["password"]))
+        task = asyncio.create_task(
+            pool_listener(pool, config[pool]["url"],
+                          config[pool]["user"], config[pool]["password"]))
+        tasks.append(task)
+    
+    for task in tasks:
+        await task
+
+
+if __name__ == "__main__":
+    config = configparser.ConfigParser()
+    config.read("pools.ini")
+    asyncio.run(run_with(config))
