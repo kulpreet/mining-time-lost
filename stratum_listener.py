@@ -1,7 +1,9 @@
 import asyncio
 import configparser
-import json
 from datetime import datetime
+import json
+import signal
+import sys
 from urllib.parse import urlparse
 
 
@@ -22,24 +24,21 @@ def send_subscribe(writer):
 async def pool_listener(poolname, url, user, password):
     parsed = urlparse(url)
     timestamp = datetime.now().isoformat(timespec='minutes')
-    file = open(f'./data/{poolname}-{timestamp}.json', 'wt')
+    with open(f'./data/{poolname}-{timestamp}.json', 'wt') as file:
+        reader, writer = await asyncio.open_connection(
+            parsed.hostname, parsed.port)
 
-    reader, writer = await asyncio.open_connection(
-        parsed.hostname, parsed.port)
+        send_subscribe(writer)
+        await send_auth(reader, writer, user, password)
 
-    send_subscribe(writer)
-    await send_auth(reader, writer, user, password)
-
-    while True:
-        line = await reader.readline()
-        msg = json.loads(line.decode())
-        msg["r"] = datetime.now().isoformat()
-        file.write(json.dumps(msg)+'\n')
-        file.flush()
-        if not line:
-            break
-
-    file.close()
+        while True:
+            line = await reader.readline()
+            msg = json.loads(line.decode())
+            msg["r"] = datetime.now().isoformat()
+            file.write(json.dumps(msg)+'\n')
+            file.flush()
+            if not line:
+                break
 
 
 async def run_with(config):
@@ -52,7 +51,16 @@ async def run_with(config):
             pool_listener(pool, config[pool]["url"],
                           config[pool]["user"], config[pool]["password"]))
         tasks.append(task)
-    
+
+    def signal_handler(sig, frame):
+        print('Stopping..')
+        for task in tasks:
+            task.cancel()
+        print('Stopped.')
+        sys.exit(0)
+
+    signal.signal(signal.SIGINT, signal_handler)
+
     for task in tasks:
         await task
 
@@ -61,3 +69,4 @@ if __name__ == "__main__":
     config = configparser.ConfigParser()
     config.read("pools.ini")
     asyncio.run(run_with(config))
+
