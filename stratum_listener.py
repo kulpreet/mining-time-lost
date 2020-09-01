@@ -32,7 +32,6 @@ async def pool_listener(poolname, url, user, password):
 
     while True:
         line = await reader.readline()
-        print(line.decode())
         msg = json.loads(line.decode())
         msg["r"] = datetime.now().isoformat()
         file.write(json.dumps(msg)+'\n')
