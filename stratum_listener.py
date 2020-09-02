@@ -4,7 +4,10 @@ from datetime import datetime
 import json
 import signal
 import sys
+import time
 from urllib.parse import urlparse
+
+RETRIES = 10
 
 
 async def send_auth(reader, writer, user, password):
@@ -25,20 +28,27 @@ async def pool_listener(poolname, url, user, password):
     parsed = urlparse(url)
     timestamp = datetime.now().isoformat(timespec='minutes')
     with open(f'./data/{poolname}-{timestamp}.json', 'wt') as file:
-        reader, writer = await asyncio.open_connection(
-            parsed.hostname, parsed.port)
+        for i in range(RETRIES):
+            try:
+                reader, writer = await asyncio.open_connection(
+                    parsed.hostname, parsed.port)
 
-        send_subscribe(writer)
-        await send_auth(reader, writer, user, password)
+                send_subscribe(writer)
+                await send_auth(reader, writer, user, password)
 
-        while True:
-            line = await reader.readline()
-            msg = json.loads(line.decode())
-            msg["r"] = datetime.now().isoformat()
-            file.write(json.dumps(msg)+'\n')
-            file.flush()
-            if not line:
-                break
+                while True:
+                    line = await reader.readline()
+                    msg = json.loads(line.decode())
+                    msg["r"] = datetime.now().isoformat()
+                    file.write(json.dumps(msg)+'\n')
+                    file.flush()
+            except:
+                if i < RETRIES:
+                    time.sleep(5)
+                    print(f'Reconnecting {poolname}')
+                    continue
+                else:
+                    raise
 
 
 async def run_with(config):
